@@ -306,8 +306,8 @@ int runCPUScheduler(struct queue *ready_queue, struct queue *done_queue, int alg
 			
 				//pthread_mutex_unlock(&mutex);
 
-				sleep(min_p ->p.burst);
-				SECS = SECS + min_p -> p.burst;				
+				sleep(min_p ->p.curr_burst);
+				SECS = SECS + min_p -> p.curr_burst;				
 				//pthread_mutex_lock(&mutex);
 				min_p -> p.curr_burst = 0;			
 			}
