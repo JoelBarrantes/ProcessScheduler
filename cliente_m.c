@@ -11,10 +11,14 @@
 #include <sys/socket.h>
 #include <arpa/inet.h> //inet_add
 #include <pthread.h>
+//cliente manual
 
 int ADDRESS = 8888;
 int ARRIVAL = 0;
 int LOCAL_ID = -1;
+
+//**********************************************************
+
 int STATUS = 0;
 
 void handler(int s){
@@ -23,6 +27,59 @@ void handler(int s){
 
 }
 
+typedef struct{
+	int  burst;
+	int  priority;
+	} proc;
+	
+	proc *process;
+
+int cont=0;
+
+/*read file*/
+int read_file(char *entrada){
+	char temp [50];
+
+	int i=0;
+	FILE * file= fopen(entrada,"rb");
+	if (file==NULL){
+		perror("Error open the file");
+		return 1;
+		}
+	fgets(temp,50,file);
+	while (!feof(file)){
+		fgets(temp,50,file);
+		++cont;
+
+		}
+		rewind(file);
+
+		process=(proc*)malloc(cont*sizeof(proc));
+		if (process==NULL){
+			printf("\n The memory could not be reserved\n");
+			return 1;
+			}
+		fgets(temp,50,file);
+		for (i=0; !feof(file); i++){
+			
+			fgets(temp,7,file);
+			if(feof(file)){
+				break;
+				}
+			process[i].burst=atoi(temp);
+
+			fgets(temp,7,file);
+			if(feof(file)){
+				break;
+				}
+			process[i].priority=atoi(temp);
+
+			}
+
+		return 0;
+	}
+
+//********************************************************************
 
 char getch() {
         char buf = 0;
@@ -49,7 +106,8 @@ void *read_key(void *status){
 
     int *status_ptr = (int *)status;
 	
-	while(*status_ptr != 1){	
+	while(*status_ptr != 1){
+	
 		int ch = getch();
 	
 		if (ch < 0){
@@ -71,8 +129,8 @@ void *read_key(void *status){
 };
 
 
-void *send_process(void *vals){
 
+void *send_process(void *vals){
 
 	int *args = (int *) vals;
 	struct timeval tv;
@@ -84,16 +142,16 @@ void *send_process(void *vals){
 	begin=tv.tv_usec;	
 
 	int sock = args[0];
-	int lmin_b = args[1];
-	int lmax_b = args[2];
+	int burst = args[1];
+	int priority = args[2];
 	
 	int lmin_w = args[3];
 	int lmax_w = args[4];
 	
 		
 	srand(time(NULL));
-	int burst = (rand() % (lmax_b - lmin_b + 1))+lmin_b;
-	int priority = (rand() % 5)+1;
+	//int burst = (rand() % (lmax_b - lmin_b + 1))+lmin_b;
+	//int priority = (rand() % 5)+1;
 	int wait_time = (rand() % (lmax_w - lmin_w +1))+lmin_w;
 	
 	int params[3];
@@ -106,20 +164,18 @@ void *send_process(void *vals){
 	//Send a number
 	if( send(sock , &params , sizeof(params) , 0) < 0)
 	{
-		
 		puts("Connection to server lost");
 		return NULL;
 	}
-
 	
 	//Receive a reply from the server
 	if( recv(sock , &reply , sizeof(reply) , 0) <= 0)
-	{
-				
+	{	
 		puts("Connection to server lost");
 		STATUS = 1;
 		return NULL;
 	}
+	
 	
 	int PID = ntohl(reply);
 	if(PID == LOCAL_ID){
@@ -137,30 +193,34 @@ void *send_process(void *vals){
 
 
 int display_help(){
-	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_c <server ip address> <burst min> <burst max> <wait min> <wait max>\nEXAMPLE: cliente_c 127.0.0.1 1 10 2 5\nPRESS ESC TO EXIT\n");
-
+	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_m <server ip address> <input file> <wait min> <wait max>\nEXAMPLE: cliente_m 127.0.0.1 input.txt 2 5\n");
+	return 0;
 }
+
 int main(int argc , char *argv[])
 {
+
 	int sock;
 	int status = 0;
-	struct sockaddr_in server;	
-    
-    if (argc < 6 ){
+	struct sockaddr_in server;
+
+    if (argc < 5 ){
+
 		display_help();
         return 1;
+
     }        
-
-	int min_b = atoi(argv[2]);
-	int max_b = atoi(argv[3]);
-	int min_w = atoi(argv[4]);
-	int max_w = atoi(argv[5]);
-
-	if(min_b > max_b){
-		printf("Burst limits invalid");
-		return 1;	
+	
+	char *entrada = (char *)argv[2];
+	int read=read_file(entrada);
+	if(read!=0){
+		printf("Invalid file\n");
+		return 1;
 	}
- 	
+	
+	int min_w = atoi(argv[3]);
+	int max_w = atoi(argv[4]);
+
 	
 	if(min_w > max_w){
 		printf("Wait limits invalid");
@@ -169,6 +229,7 @@ int main(int argc , char *argv[])
  	
 	int args[5];
     
+	
     //Create socket
 	sock = socket(AF_INET , SOCK_STREAM , 0);
 	if (sock == -1)
@@ -193,22 +254,25 @@ int main(int argc , char *argv[])
 	printf("Connected to %s\n",argv[1]);
 	
 	args[0] = sock;
-	args[1] = min_b;
-	args[2] = max_b;
+
 	args[3] = min_w;
 	args[4] = max_w;
+
 	
 	pthread_t key_reader;
 	if(pthread_create(&key_reader, NULL, read_key, &status)){
-		printf("Error creating thread\n");
+		fprintf(stderr, "Error creating thread\n");
 		return 1;
 	}
-	
-	signal(SIGPIPE, handler);
 
+	signal(SIGPIPE, handler);
 	//keep communicating with server
-	while(status != 1)
-	{
+	for(int i=0; i<cont-1; i++){
+		if (status == 1){
+			break;	
+		}
+		args[1] = process[i].burst;
+	    args[2] = process[i].priority;
 		pthread_t p;
 		if(pthread_create(&p, NULL, send_process, &args)){
 			printf("Error creating thread\n");
@@ -217,12 +281,15 @@ int main(int argc , char *argv[])
 		pthread_join(p, NULL);
 		if (STATUS == 1){
 			printf("\nPress ESC to exit\n");
-			break;		
-		}				
+			break;				
+		}
+		if ((i+1) == (cont-1)){
+			printf("\nPress ESC to exit\n");
 		
+		}
 	}
-
-
+	
+	
 	close(sock);	
 	pthread_join(key_reader, NULL);	
 	

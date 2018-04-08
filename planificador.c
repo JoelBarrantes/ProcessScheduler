@@ -73,23 +73,6 @@ char getch() {
         return (buf);
 }
 
-
-void *count(void *args){
-	
-	int *finish = (int *)args;
-	while (*finish != 1){
-		pthread_mutex_lock(&mutex);	
-		SECS++;
-		printf("%d",SECS);
-		fflush(stdout);		
-		pthread_mutex_unlock(&mutex);
-		sleep(1);
-		
-	}
-	return NULL;
-}
-
-
 void *CPU_scheduler_thread(void *arguments){
 
 	struct thread_args *args = (struct thread_args *)arguments;
@@ -100,17 +83,10 @@ void *CPU_scheduler_thread(void *arguments){
 	struct queue *d_queue = (struct queue *)args->done_queue;
 	
 	int finish = 0;	
-	//pthread_t counter;
 
 	printf("CPU Scheduler ready. Waiting for a process...\n");
 	fflush(stdout);
-	/*	
-	if(pthread_create(&counter, NULL, count, &finish)){
-		fprintf(stderr, "Error creating thread\n");
-		return NULL;
-	}
-	*/
-
+	
 	while(*status_ptr != 1){
 	
 		runCPUScheduler(p_queue,d_queue, algorithm, quantum);
@@ -118,11 +94,8 @@ void *CPU_scheduler_thread(void *arguments){
 	}
 
 	finish = 1;
-	/*pthread_join(counter, NULL);*/
 	display_times(d_queue);	
-	
-	
-	
+		
 	return NULL;
     
 };
@@ -139,7 +112,6 @@ void *Job_scheduler_thread(void *arguments){
     struct sockaddr_in server, client;
 
 	int client_sock , c ;
-
 
     //Create socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -173,7 +145,6 @@ void *Job_scheduler_thread(void *arguments){
 	//accept connection from an incoming client
 	client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
 	
-	
 	if (client_sock < 0)
 	{
 		*status_ptr = 1;
@@ -188,20 +159,22 @@ void *Job_scheduler_thread(void *arguments){
 	tv.tv_usec = 500000;
 	
 	setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, (struct timeval *)&tv, sizeof(struct timeval));
+
 	///////////////////////SOCKET///////////////////////
 
-
+	int connection_lost = 1;
 	while(*status_ptr != 1){
 		
 		int res = runJobScheduler(p_queue, client_sock);
-		if (res == 2){
-			printf("\nConnection lost\n");
-			*status_ptr = 1;
+		if (res == 2 & connection_lost == 1){
+			connection_lost = 0;			
+			printf("\n#####CONECTION LOST#####\n\n");
+			close(socket_desc);
 		}
 	}
 
 	close(client_sock);
-	close(socket_desc);
+	printf("Sockets closed succesfully");
 	return NULL;
     
 };
@@ -282,7 +255,7 @@ int display_times(struct queue *done_queue){
 	mu_tat = mu_tat / p_quantity;
 	mu_wt = mu_wt / p_quantity;
 	
-	printf("\nCPU Wait: %d\n", cpu_wait );
+	printf("\nIdle CPU (seconds): %d\n", cpu_wait );
 	printf("Processes Finished: %d\n", p_quantity );
 
 	printf("Average Turn-Around Time: %f\n", mu_tat );	
