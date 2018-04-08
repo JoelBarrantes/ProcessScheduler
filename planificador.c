@@ -172,6 +172,8 @@ void *Job_scheduler_thread(void *arguments){
    
 	//accept connection from an incoming client
 	client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
+	
+	
 	if (client_sock < 0)
 	{
 		*status_ptr = 1;
@@ -194,6 +196,7 @@ void *Job_scheduler_thread(void *arguments){
 		runJobScheduler(p_queue, client_sock);
 	
 	}
+	close(client_sock);
 	close(socket_desc);
 	return NULL;
     

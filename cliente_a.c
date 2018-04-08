@@ -14,7 +14,7 @@
 
 int ADDRESS = 8888;
 int ARRIVAL = 0;
-
+int LOCAL_ID = -1;
 
 char getch() {
         char buf = 0;
@@ -63,8 +63,10 @@ void *read_key(void *status){
 };
 
 
-int send_process(int sock){
+void *send_process(void *vals){
 
+
+	int *args = (int *) vals;
 	struct timeval tv;
 	gettimeofday(&tv, NULL); 
 	
@@ -73,10 +75,19 @@ int send_process(int sock){
 	
 	begin=tv.tv_usec;	
 
+	int sock = args[0];
+	int lmin_b = args[1];
+	int lmax_b = args[2];
+	
+	int lmin_w = args[3];
+	int lmax_w = args[4];
+	
+		
 	srand(time(NULL));
-	int burst = (rand() % 6)+1;
+	int burst = (rand() % (lmax_b - lmin_b + 1))+lmin_b;
 	int priority = (rand() % 5)+1;
-	int wait_time = (rand() % 3)+3;
+	int wait_time = (rand() % (lmax_w - lmin_w +1))+lmin_w;
+	
 	int params[3];
 	int reply;
 
@@ -87,44 +98,73 @@ int send_process(int sock){
 	//Send a number
 	if( send(sock , &params , sizeof(params) , 0) < 0)
 	{
-		puts("Send failed");
-		return 1;
+		puts("Connection to the server closed. Exiting the application...");
+		return NULL;
 	}
 	
 	//Receive a reply from the server
-	if( recv(sock , &reply , sizeof(reply) , 0) < 0)
+	if( recv(sock , &reply , sizeof(reply) , 0) <= 0)
 	{
-		puts("recv failed");
-		return -1;
+		puts("Connection to the server lost. Exiting the application...");
+		return NULL;
 	}
 	
 	
 	int PID = ntohl(reply);
+	if(PID == LOCAL_ID){
+		printf("Closing connection...");
+		return NULL;
+	}
+	LOCAL_ID = PID;
 	printf("Process with PID %d created. Arrived at %d seconds\n", PID, ARRIVAL);
 	ARRIVAL = ARRIVAL + wait_time;	
 	gettimeofday(&tv, NULL); 
 	finish = tv.tv_usec;
 	usleep((wait_time * 1000000)-(finish - begin));
-	return PID;
+	return NULL;
 }
 
 
+int display_help(){
+	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_c <server ip address> <burst min> <burst max> <wait min> <wait max>\nEXAMPLE: cliente_c 127.0.0.1 1 10 2 5\n");
+
+}
 int main(int argc , char *argv[])
 {
 	
+
+
 	int sock;
-	int params[2];
 	int status = 0;
 	struct sockaddr_in server;
 	
     
-    if (argc < 2 ){
+    if (argc < 6 ){
 
-		printf("IP Address needed\n");
+		display_help();
         return 1;
 
     }        
-    	
+
+	int min_b = atoi(argv[2]);
+	int max_b = atoi(argv[3]);
+	int min_w = atoi(argv[4]);
+	int max_w = atoi(argv[5]);
+
+	if(min_b > max_b){
+		printf("Burst limits invalid");
+		return 1;	
+	}
+ 	
+	
+	if(min_w > max_w){
+		printf("Wait limits invalid");
+		return 1;	
+	}
+ 	
+	int args[5];
+    
+	
     //Create socket
 	sock = socket(AF_INET , SOCK_STREAM , 0);
 	if (sock == -1)
@@ -146,9 +186,15 @@ int main(int argc , char *argv[])
 		return 1;
 	}
 	
-	puts("Connected\n");
+	printf("Connected to %s\n",argv[1]);
 	
-
+	args[0] = sock;
+	args[1] = min_b;
+	args[2] = max_b;
+	args[3] = min_w;
+	args[4] = max_w;
+	
+	
 	pthread_t key_reader;
 	if(pthread_create(&key_reader, NULL, read_key, &status)){
 		fprintf(stderr, "Error creating thread\n");
@@ -158,12 +204,14 @@ int main(int argc , char *argv[])
 	//keep communicating with server
 	while(status != 1)
 	{
-		int pid = send_process(sock);
-		if (pid == -1){
-			printf("Connection lost\n");
-			close(sock);	
+		pthread_t p;
+		if(pthread_create(&p, NULL, send_process, &args)){
+			fprintf(stderr, "Error creating thread\n");
 			return 1;
 		}
+		pthread_join(p, NULL);	
+				
+		
 	}
 
 	close(sock);	
