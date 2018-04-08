@@ -193,9 +193,13 @@ void *Job_scheduler_thread(void *arguments){
 
 	while(*status_ptr != 1){
 		
-		runJobScheduler(p_queue, client_sock);
-	
+		int res = runJobScheduler(p_queue, client_sock);
+		if (res == 2){
+			printf("\nConnection lost\n");
+			*status_ptr = 1;
+		}
 	}
+
 	close(client_sock);
 	close(socket_desc);
 	return NULL;
@@ -222,6 +226,7 @@ void *read_key(void *arguments){
 			++(*status_ptr);
 			printf("\nFinishing...\n");
 			fflush(stdout);
+			break;
 			
 		}
 		if (ch == 9){
@@ -302,10 +307,16 @@ int runJobScheduler(struct queue *ready_queue, int client_sock){
 	int params[3];
 
 	read_size = recv(client_sock , &params , sizeof(params) , 0);
-	
 
-	if (read_size <= 0) {
+	if(read_size<0){
 		return 1;
+	}	
+
+	if (read_size == 0) {
+		gettimeofday(&tv, NULL); 
+		finish = tv.tv_usec;		
+		usleep(1000000 - (finish - begin));
+		return 2;
 	}
 	
 	
@@ -322,12 +333,6 @@ int runJobScheduler(struct queue *ready_queue, int client_sock){
 		write(client_sock , &reply , sizeof(reply));
 	}
 	
-
-	if(read_size == -1)
-	{
-	    perror("recv failed");
-		return 1;	
-	}   
 
 	struct PCB pcb;
 	pcb.PID = GLOBAL_PID++;
@@ -583,9 +588,11 @@ int main(int argc, char **argv)
 	}
 
 	pthread_join(job_scheduler_thread, NULL);
+	printf("\nJobScheduler Thread closed\n");
 	pthread_join(cpu_scheduler_thread, NULL);
+	printf("\nCPUScheduler Thread closed\n");
 	pthread_join(key_reader, NULL);
-
+	printf("KeyReader Thread closed\n");
 
 	return 0;
 
