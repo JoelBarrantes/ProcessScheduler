@@ -94,9 +94,41 @@ void *CPU_scheduler_thread(void *arguments){
 	struct queue *p_queue = (struct queue *)args->ready_queue;
 	struct queue *d_queue = (struct queue *)args->done_queue;
 	
-	int finish = 0;
+	int finish = 0;	
+	//pthread_t counter;
+
+
+	///////////////////////SOCKET///////////////////////
+
 	
-	pthread_t counter;
+    int socket_desc , client_sock , c , read_size;
+    struct sockaddr_in server , client;
+    
+    //Create socket
+    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
+    if (socket_desc == -1)
+    {
+        printf("Could not create socket");
+    }
+    puts("Socket created");
+     
+    //Prepare the sockaddr_in structure
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons( 8080 );
+     
+    //Bind
+    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
+    {
+        //print the error message
+        perror("bind failed. Error");
+        return 1;
+    }
+    puts("Bind done");
+     
+	///////////////////////SOCKET///////////////////////
+
+
 
 	printf("CPU Scheduler ready. Waiting for a process...\n");
 	fflush(stdout);
@@ -106,12 +138,13 @@ void *CPU_scheduler_thread(void *arguments){
 		return NULL;
 	}
 	*/
-	
+
 	while(*status_ptr != 1){
 	
-		runCPUScheduler(p_queue,d_queue, algorithm, quantum);
+		runCPUScheduler(p_queue,d_queue, algorithm, quantum, &sock);
 		
 	}
+
 	finish = 1;
 	/*pthread_join(counter, NULL);*/
 	display_times(d_queue);	
