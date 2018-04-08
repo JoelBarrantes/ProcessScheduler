@@ -9,8 +9,12 @@
 #include <time.h>
 #include <math.h>
 #include <termios.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <arpa/inet.h> //inet_add
 
-
+int ADDRESS = 8888;
 int GLOBAL_PID=0;
 int SECS = 0;
 int SECS_L = 0;
@@ -85,6 +89,7 @@ void *count(void *args){
 	return NULL;
 }
 
+
 void *CPU_scheduler_thread(void *arguments){
 
 	struct thread_args *args = (struct thread_args *)arguments;
@@ -97,39 +102,6 @@ void *CPU_scheduler_thread(void *arguments){
 	int finish = 0;	
 	//pthread_t counter;
 
-
-	///////////////////////SOCKET///////////////////////
-
-	
-    int socket_desc , client_sock , c , read_size;
-    struct sockaddr_in server , client;
-    
-    //Create socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
-    if (socket_desc == -1)
-    {
-        printf("Could not create socket");
-    }
-    puts("Socket created");
-     
-    //Prepare the sockaddr_in structure
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 8080 );
-     
-    //Bind
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
-    {
-        //print the error message
-        perror("bind failed. Error");
-        return 1;
-    }
-    puts("Bind done");
-     
-	///////////////////////SOCKET///////////////////////
-
-
-
 	printf("CPU Scheduler ready. Waiting for a process...\n");
 	fflush(stdout);
 	/*	
@@ -141,7 +113,7 @@ void *CPU_scheduler_thread(void *arguments){
 
 	while(*status_ptr != 1){
 	
-		runCPUScheduler(p_queue,d_queue, algorithm, quantum, &sock);
+		runCPUScheduler(p_queue,d_queue, algorithm, quantum);
 		
 	}
 
@@ -156,14 +128,73 @@ void *CPU_scheduler_thread(void *arguments){
 };
 
 void *Job_scheduler_thread(void *arguments){
-
+	
 	struct thread_args *args = (struct thread_args *)arguments;
     int *status_ptr = (int *)args->status;
 	struct queue *p_queue = (struct queue *)args->ready_queue;
+
+	///////////////////////SOCKET///////////////////////
+
+	int socket_desc;
+    struct sockaddr_in server, client;
+
+	int client_sock , c ;
+
+
+    //Create socket
+    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
+    if (socket_desc == -1)
+    {
+        printf("Could not create socket");
+    }
+    puts("Socket Created");
+     
+    //Prepare the sockaddr_in structure
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons( ADDRESS );
+     
+    //Bind
+    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
+    {
+        //print the error message
+        perror("bind failed. Error");
+		*status_ptr = 1;
+        return NULL;
+    }
+    puts("Bind Done");
+
+	listen(socket_desc,1);
+
+	//Accept and incoming connection
+    puts("Waiting for a connection...");
+    c = sizeof(struct sockaddr_in);
+   
+	//accept connection from an incoming client
+	client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
+	if (client_sock < 0)
+	{
+		*status_ptr = 1;
+	    perror("accept failed");
+	    return NULL;
+	}
+	puts("Connection established");
+     
+
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 500000;
+	
+	setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, (struct timeval *)&tv, sizeof(struct timeval));
+	///////////////////////SOCKET///////////////////////
+
+
 	while(*status_ptr != 1){
 		
-		runJobScheduler(p_queue);
+		runJobScheduler(p_queue, client_sock);
+	
 	}
+	close(socket_desc);
 	return NULL;
     
 };
@@ -254,21 +285,51 @@ int display_times(struct queue *done_queue){
 
 }
 
-int runJobScheduler(struct queue *ready_queue){
+int runJobScheduler(struct queue *ready_queue, int client_sock){
+	
+	struct timeval tv;
+	gettimeofday(&tv, NULL); 
+	
+	time_t finish;
+	time_t begin;
+	
+	begin=tv.tv_usec;	
+	
+	int read_size;	
+	int params[3];
+
+	read_size = recv(client_sock , &params , sizeof(params) , 0);
+	
+
+	if (read_size <= 0) {
+		return 1;
+	}
 	
 	
+	int burst;
+	int priority;
+	int arrival;
+
+	if (read_size > 0){
+		burst = params[0];
+		priority = params[1];
+		arrival = params[2];		
+		int PID = GLOBAL_PID;
+		int reply = htonl(PID);
+		write(client_sock , &reply , sizeof(reply));
+	}
 	
-	srand(time(NULL));
-	int burst = (rand() % 10)+1;
-	int priority = (rand() % 5)+1;
-	int wait_time = (rand() % 3)+3;
-	
+
+	if(read_size == -1)
+	{
+	    perror("recv failed");
+		return 1;	
+	}   
+
 	struct PCB pcb;
 	pcb.PID = GLOBAL_PID++;
 	pcb.priority = priority;
 	pcb.status = 1;	
-	
-	
 
 	struct process proc;
 	proc.process_pcb = pcb;
@@ -277,7 +338,6 @@ int runJobScheduler(struct queue *ready_queue){
 	proc.curr_burst = burst;
 	//pthread_mutex_lock(&mutex);	
 	proc.begin_time = SECS_L;
-	printf("+%d+", SECS_L);
 	//pthread_mutex_unlock(&mutex);
 	proc.TAT = 0;
 	proc.WT = 0;
@@ -289,9 +349,14 @@ int runJobScheduler(struct queue *ready_queue){
 	//INIT_LIST_HEAD(&queue_tmp->list);
 	queue_tmp->p = proc;
 	list_add_tail(&(queue_tmp->list), &(ready_queue -> list));	
+	printf("Process has arrived at time: %d\n", SECS_L);	
+	fflush(stdout);	
 	
-	sleep(wait_time);
-	SECS_L = SECS_L + wait_time;
+	gettimeofday(&tv, NULL); 
+	finish = tv.tv_usec;		
+
+	usleep(1000000 - (finish - begin));
+	SECS_L = SECS_L + arrival;
 	
 	
 	return 0;
@@ -363,7 +428,7 @@ int runCPUScheduler(struct queue *ready_queue, struct queue *done_queue, int alg
 		}
 		
 		if (min_p -> p.curr_burst == 0){
-			printf("%d", SECS);
+
 			min_p -> p.TAT = SECS - (min_p -> p.begin_time);
 					
 			min_p -> p.WT = (min_p -> p.TAT) - (min_p -> p.burst);
