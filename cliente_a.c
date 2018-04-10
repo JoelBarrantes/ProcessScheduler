@@ -137,7 +137,7 @@ void *send_process(void *vals){
 
 
 int display_help(){
-	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_c <server ip address> <burst min> <burst max> <wait min> <wait max>\nEXAMPLE: cliente_c 127.0.0.1 1 10 2 5\nPRESS ESC TO EXIT\n");
+	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_a <server ip address> <burst min> <burst max> <wait min> <wait max>\nEXAMPLE: cliente_a 127.0.0.1 1 10 2 5\nPRESS ESC TO EXIT\n");
 
 }
 int main(int argc , char *argv[])

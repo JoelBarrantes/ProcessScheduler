@@ -193,7 +193,7 @@ void *send_process(void *vals){
 
 
 int display_help(){
-	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_m <server ip address> <input file> <wait min> <wait max>\nEXAMPLE: cliente_m 127.0.0.1 input.txt 2 5\n");
+	printf("RUN THE PROGRAM WITH THE FOLLOWING FORMAT:\ncliente_m <server ip address> <input file> <wait min> <wait max>\nEXAMPLE: cliente_m 127.0.0.1 input.txt 2 5\nDefault wain min and wait max: 3 - 8\nPRESS ESC TO EXIT\n");
 	return 0;
 }
 
@@ -202,9 +202,23 @@ int main(int argc , char *argv[])
 
 	int sock;
 	int status = 0;
+    int min_w;
+    int max_w;
 	struct sockaddr_in server;
 
-    if (argc < 5 ){
+
+    if (argc == 3){
+        min_w = 3;
+	    max_w = 8;
+    
+    }
+    
+    else if (argc == 5){
+        min_w = atoi(argv[3]);
+	    max_w = atoi(argv[4]);    
+    }
+
+    else {
 
 		display_help();
         return 1;
@@ -217,10 +231,6 @@ int main(int argc , char *argv[])
 		printf("Invalid file\n");
 		return 1;
 	}
-	
-	int min_w = atoi(argv[3]);
-	int max_w = atoi(argv[4]);
-
 	
 	if(min_w > max_w){
 		printf("Wait limits invalid");
